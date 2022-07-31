@@ -4,8 +4,8 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    const float TRANS_TIME = 0.05f;//移動速度
-    const float ROT_TIME = 0.05f;//回転速度
+    const int TRANS_TIME = 3;//移動速度
+    const int ROT_TIME = 3;//回転速度
     enum RotState
     {
         Up = 0,
@@ -25,6 +25,8 @@ public class PlayerController : MonoBehaviour
     AnimationController _animationController = new AnimationController();
     Vector2Int _lastposition;
     RotState _last_rotate = RotState.Up;
+
+    LogicalInput logicalInput = new();
 
     // Start is called before the first frame update
     void Start()
@@ -55,7 +57,7 @@ public class PlayerController : MonoBehaviour
         return true;
     }
 
-    void SetTransition(Vector2Int pos,RotState rot,float time)
+    void SetTransition(Vector2Int pos,RotState rot,int time)
     {
         _lastposition = _position;
         _last_rotate = _rotate;
@@ -70,11 +72,6 @@ public class PlayerController : MonoBehaviour
         Vector2Int pos = _position + (is_right ? Vector2Int.right : Vector2Int.left);
         if (!CanMove(pos, _rotate)) return false;
 
-        //_position = pos;
-
-        //_puyoControllers[0].SetPos(new Vector3((float)_position.x, (float)_position.y, 0.0f));
-        //Vector2Int posChild = CalcChildPuyoPos(_position, _rotate);
-        //_puyoControllers[1].SetPos(new Vector3((float)posChild.x, (float)posChild.y, 0.0f));
         SetTransition(pos, _rotate, TRANS_TIME);
 
         return true;
@@ -108,12 +105,6 @@ public class PlayerController : MonoBehaviour
         }
         if (!CanMove(pos, rot)) return false;
 
-        //_position = pos;
-        //_rotate = rot;
-
-        //_puyoControllers[0].SetPos(new Vector3((float)_position.x, (float)_position.y, 0.0f));
-        //Vector2Int posChild = CalcChildPuyoPos(_position, _rotate);
-        //_puyoControllers[1].SetPos(new Vector3((float)posChild.x, (float)posChild.y, 0.0f));
         SetTransition(pos, rot, ROT_TIME);
         return true;
     }
@@ -142,41 +133,72 @@ public class PlayerController : MonoBehaviour
         gameObject.SetActive(false);
     }
 
+    static readonly KeyCode[] key_code_tbl = new KeyCode[(int)LogicalInput.Key.MAX]{
+        KeyCode.RightArrow, 
+        KeyCode.LeftArrow, 
+        KeyCode.X,         
+        KeyCode.Z,          
+        KeyCode.UpArrow,    
+        KeyCode.DownArrow,  
+    };
+
+    void UpdateInput()
+    {
+        LogicalInput.Key inputDev = 0;//デバイス値
+
+        //キー入力所得
+        for(int i = 0; i < (int)LogicalInput.Key.MAX; i++)
+        {
+            if (Input.GetKey(key_code_tbl[i]))
+            {
+                inputDev |= (LogicalInput.Key)(1 << i);
+            }
+        }
+
+        logicalInput.Update(inputDev);
+    }
+
     void Control()
     {
-        if (Input.GetKeyDown(KeyCode.RightArrow))
+        if (logicalInput.IsRepeat(LogicalInput.Key.Right))
         {
             if (Translate(true)) return;
         }
-        if (Input.GetKeyDown(KeyCode.LeftArrow))
+        if (logicalInput.IsRepeat(LogicalInput.Key.Left))
         {
-            if (Translate(true)) return;
+            if (Translate(false)) return;
         }
-        if (Input.GetKeyDown(KeyCode.X))
-        {
-            if (Rotate(true)) return;
-        }
-        if (Input.GetKeyDown(KeyCode.Z))
+
+        if (logicalInput.IsTrigger(LogicalInput.Key.RotR))
         {
             if (Rotate(true)) return;
         }
-        if (Input.GetKeyDown(KeyCode.UpArrow))
+        if (logicalInput.IsTrigger(LogicalInput.Key.RotL))
+        {
+            if (Rotate(false)) return;
+        }
+
+        if (logicalInput.IsRelease(LogicalInput.Key.QuickDrop))
         {
             QuickDrop();
         }
     }
-    // Update is called once per frame
-    void Update()
+
+    private void FixedUpdate()
     {
-        if (!_animationController.Update(Time.deltaTime))
+        UpdateInput();
+
+        if (!_animationController.Update())
         {
             Control();
         }
 
         float anim_rate = _animationController.GetNormalized();
         _puyoControllers[0].SetPos(Interpolate(_position, RotState.Invalid, _lastposition, RotState.Invalid, anim_rate));
-        _puyoControllers[1].SetPos(Interpolate(_position, _rotate, _lastposition,_last_rotate, anim_rate));
+        _puyoControllers[1].SetPos(Interpolate(_position, _rotate, _lastposition, _last_rotate, anim_rate));
+
     }
+
     static Vector3 Interpolate(Vector2Int pos, RotState rot, Vector2Int pos_last, RotState rot_last, float rate)
     {
         Vector3 p = Vector3.Lerp(
