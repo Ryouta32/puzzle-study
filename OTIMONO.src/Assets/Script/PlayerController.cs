@@ -30,22 +30,45 @@ public class PlayerController : MonoBehaviour
     Vector2Int _lastposition;
     RotState _last_rotate = RotState.Up;
 
-    LogicalInput logicalInput = new();
+    LogicalInput _logicalInput = new();
 
     int _fallCount = 0;
     int _groundFrame = GROUND_FRAMES;
     // Start is called before the first frame update
     void Start()
     {
-        _puyoControllers[0].SetPuyoType(PuyoType.Green);
-        _puyoControllers[1].SetPuyoType(PuyoType.Red);
+        gameObject.SetActive(false);
+    }
+    public void SetLogicalInput(LogicalInput reference)
+    {
+        _logicalInput = reference;
+    }
 
-        _position = new Vector2Int(2, 12);
-        _rotate = RotState.Up;
+    public bool Spawn(PuyoType axis,PuyoType child)
+    {
+        //初期地点と向きの設定
+        Vector2Int position = new(2, 12);
+        RotState rotate = RotState.Up;
+        if (!CanMove(position, rotate)) return false;
+
+        // パラメータの初期化
+        _position = _lastposition = position;
+        _rotate = _last_rotate = rotate;
+        _animationController.set(1);
+        _fallCount = 0;
+        _groundFrame = GROUND_FRAMES;
+
+        // ぷよをだす
+        _puyoControllers[0].SetPuyoType(axis);
+        _puyoControllers[1].SetPuyoType(child);
 
         _puyoControllers[0].SetPos(new Vector3((float)_position.x, (float)_position.y, 0.0f));
         Vector2Int posChild = CalcChildPuyoPos(_position, _rotate);
         _puyoControllers[1].SetPos(new Vector3((float)posChild.x, (float)posChild.y, 0.0f));
+
+        gameObject.SetActive(true);
+
+        return true;
     }
 
     static readonly Vector2Int[] rotate_tbl = new Vector2Int[] {
@@ -142,31 +165,6 @@ public class PlayerController : MonoBehaviour
         Settle();
     }
 
-    static readonly KeyCode[] key_code_tbl = new KeyCode[(int)LogicalInput.Key.MAX]{
-        KeyCode.RightArrow, 
-        KeyCode.LeftArrow, 
-        KeyCode.X,         
-        KeyCode.Z,          
-        KeyCode.UpArrow,    
-        KeyCode.DownArrow,  
-    };
-
-    void UpdateInput()
-    {
-        LogicalInput.Key inputDev = 0;//デバイス値
-
-        //キー入力所得
-        for(int i = 0; i < (int)LogicalInput.Key.MAX; i++)
-        {
-            if (Input.GetKey(key_code_tbl[i]))
-            {
-                inputDev |= (LogicalInput.Key)(1 << i);
-            }
-        }
-
-        logicalInput.Update(inputDev);
-    }
-
     bool Fall(bool is_fast)
     {
         _fallCount -= is_fast ? FALL_COUNT_FAST_SPD : FALL_COUNT_SPD;
@@ -192,30 +190,30 @@ public class PlayerController : MonoBehaviour
     }
     void Control()
     {
-        if (!Fall(logicalInput.IsRaw(LogicalInput.Key.Down)))
+        if (!Fall(_logicalInput.IsRaw(LogicalInput.Key.Down)))
             return;
 
         if (_animationController.Update()) return;
 
-        if (logicalInput.IsRepeat(LogicalInput.Key.Right))
+        if (_logicalInput.IsRepeat(LogicalInput.Key.Right))
         {
             if (Translate(true)) return;
         }
-        if (logicalInput.IsRepeat(LogicalInput.Key.Left))
+        if (_logicalInput.IsRepeat(LogicalInput.Key.Left))
         {
             if (Translate(false)) return;
         }
 
-        if (logicalInput.IsTrigger(LogicalInput.Key.RotR))
+        if (_logicalInput.IsTrigger(LogicalInput.Key.RotR))
         {
             if (Rotate(true)) return;
         }
-        if (logicalInput.IsTrigger(LogicalInput.Key.RotL))
+        if (_logicalInput.IsTrigger(LogicalInput.Key.RotL))
         {
             if (Rotate(false)) return;
         }
 
-        if (logicalInput.IsRelease(LogicalInput.Key.QuickDrop))
+        if (_logicalInput.IsRelease(LogicalInput.Key.QuickDrop))
         {
             QuickDrop();
         }
@@ -223,8 +221,6 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        UpdateInput();
-
             Control();
 
         Vector3 dy = Vector3.up * (float)_fallCount / (float)FALL_COUNT_UNIT;
