@@ -11,6 +11,7 @@ interface IState
         GameOver=1,
         Falling = 2,
         Erasing = 3,
+        Waiting =4,
 
         MAX,
         Unchanged,
@@ -34,6 +35,8 @@ public class PlayDirector : MonoBehaviour
     [SerializeField] TextMeshProUGUI textScore = default!;
     uint _score = 0;
     int _chainCount = -1;
+    
+    bool _canSpawn = false;
 
     IState.E_State _current_state = IState.E_State.Falling;
     static readonly IState[] states = new IState[(int)IState.E_State.MAX]{
@@ -41,6 +44,7 @@ public class PlayDirector : MonoBehaviour
         new GameOverState(),
         new FallingState(),
         new ErasingState(),
+        new WaitingState(),
     };
     void Start()
     {
@@ -50,8 +54,10 @@ public class PlayDirector : MonoBehaviour
         _boardController = GetComponent<BoardController>();
 
         _nextQueue.Initialize();
-        Spawn(_nextQueue.Update());
+        UpdateNextsView();
+        InitializeState();
 
+        SetScore(0);
     }
     void UpdateNextsView()
     {
@@ -83,7 +89,14 @@ public class PlayDirector : MonoBehaviour
 
         _logicalInput.Update(inputDev);
     }
-
+    class WaitingState : IState
+    {
+        public IState.E_State Initialize(PlayDirector parent) { return IState.E_State.Unchanged; }
+        public IState.E_State Update(PlayDirector parent)
+        {
+            return parent._canSpawn ? IState.E_State.Control : IState.E_State.Unchanged;
+        }
+    }
     class ControlState : IState
     {
         public IState.E_State Initialize(PlayDirector parent)
@@ -128,10 +141,10 @@ public class PlayDirector : MonoBehaviour
         {
             if (parent._boardController.CheckErase(parent._chainCount++))
             {
-                return IState.E_State.Unchanged;// 消すアニメーションに突入
+                return IState.E_State.Unchanged;
             }
-            parent._chainCount = 0;// 連鎖が途切れた
-            return IState.E_State.Control;// 消すものはない
+            parent._chainCount = 0;
+            return parent._canSpawn ? IState.E_State.Control : IState.E_State.Waiting;
         }
         public IState.E_State Update(PlayDirector parent)
         {
@@ -180,5 +193,14 @@ public class PlayDirector : MonoBehaviour
     void AddScore(uint score)
     {
         if (0 < score) SetScore(_score + score);
+    }
+    public void EnableSpawn(bool enable)
+    {
+        _canSpawn = enable;
+    }
+
+    public bool IsGameOver()
+    {
+        return _current_state == IState.E_State.GameOver;
     }
 }
