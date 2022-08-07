@@ -34,6 +34,8 @@ public class PlayerController : MonoBehaviour
 
     int _fallCount = 0;
     int _groundFrame = GROUND_FRAMES;
+
+    uint _additiveScore = 0;
     // Start is called before the first frame update
     void Start()
     {
@@ -186,6 +188,7 @@ public class PlayerController : MonoBehaviour
             _lastposition += Vector2Int.down;
             _fallCount += FALL_COUNT_UNIT;
         }
+        if (is_fast) _additiveScore++;//ボーナス
         return true;
     }
     void Control()
@@ -250,5 +253,12 @@ public class PlayerController : MonoBehaviour
         theta = theta0 + rate * theta;
 
         return p + new Vector3(Mathf.Sin(theta), Mathf.Cos(theta), 0.0f);
+    }
+    public uint popScore()
+    {
+        uint score = _additiveScore;
+        _additiveScore = 0;
+
+        return score;
     }
 }

@@ -31,6 +31,8 @@ public class BoardController : MonoBehaviour
 
     List<Vector2Int> _erases = new();
     int _eraseFrames = 0;
+
+    uint _additiveScore = 0;
     private void ClearAll()
     {
         for (int y = 0; y < BOARD_HEIGHT; y++)
@@ -140,58 +142,97 @@ public class BoardController : MonoBehaviour
         return _falls.Count != 0;
     }
 
+    static readonly uint[] chainBonusTbl = new uint[] {
+        0, 8, 16, 32, 64,
+        96, 128, 160, 192, 224,
+        256, 288, 320, 352, 384,
+        416, 448, 480, 512 };
+
+    static readonly uint[] connectBonusTbl = new uint[] {
+        0, 0, 0, 0, 0, 2, 3, 4, 5, 6, 7,
+    };
+
+    static readonly uint[] colorBonusTbl = new uint[] {
+        0, 3, 6, 12, 24,
+    };
+
     static readonly Vector2Int[] search_tbl = new Vector2Int[] { Vector2Int.up, Vector2Int.right, Vector2Int.down, Vector2Int.left };
-    public bool CheckErase()
+    public bool CheckErase(int chainCount)
     {
-        _eraseFrames = 0;
-        _erases.Clear();
-
-        uint[] isChecked = new uint[BOARD_HEIGHT];
-
-        List<Vector2Int> add_list = new();
-        for (int y = 0; y < BOARD_HEIGHT; y++)
         {
-            for (int x = 0; x < BOARD_WIDTH; x++)
+            _eraseFrames = 0;
+            _erases.Clear();
+
+            uint[] isChecked = new uint[BOARD_HEIGHT];
+
+            // “¾“_ŒvŽZ—p
+            int puyoCount = 0;
+            uint colorBits = 0;
+            uint connectBonus = 0;
+
+            List<Vector2Int> add_list = new();
+            for (int y = 0; y < BOARD_HEIGHT; y++)
             {
-                if ((isChecked[y] & (1u << x)) != 0) continue;
-
-                isChecked[y] |= (1u << x);
-
-                int type = _board[y, x];
-                if (type == 0) continue;
-
-                System.Action<Vector2Int> get_connection = null;
-                get_connection = (pos) =>
+                for (int x = 0; x < BOARD_WIDTH; x++)
                 {
-                    add_list.Add(pos);
+                    if ((isChecked[y] & (1u << x)) != 0) continue;
 
-                    foreach (Vector2Int d in search_tbl)
+                    isChecked[y] |= (1u << x);
+
+                    int type = _board[y, x];
+                    if (type == 0) continue;
+
+                    puyoCount++;
+
+                    System.Action<Vector2Int> get_connection = null;
+                    get_connection = (pos) =>
                     {
-                        Vector2Int target = pos + d;
-                        if (target.x < 0 || BOARD_WIDTH <= target.x ||
-                            target.y < 0 || BOARD_HEIGHT <= target.y) continue;
-                        if (_board[target.y, target.x] != type) continue;
-                        if ((isChecked[target.y] & (1u << target.x)) != 0) continue;
+                        add_list.Add(pos);
 
-                        isChecked[target.y] |= (1u << target.x);
-                        get_connection(target);
+                        foreach (Vector2Int d in search_tbl)
+                        {
+                            Vector2Int target = pos + d;
+                            if (target.x < 0 || BOARD_WIDTH <= target.x ||
+                                target.y < 0 || BOARD_HEIGHT <= target.y) continue;
+                            if (_board[target.y, target.x] != type) continue;
+                            if ((isChecked[target.y] & (1u << target.x)) != 0) continue;
+
+                            isChecked[target.y] |= (1u << target.x);
+                            get_connection(target);
+                        }
+                    };
+
+                    add_list.Clear();
+                    get_connection(new Vector2Int(x, y));
+
+                    if (4 <= add_list.Count)
+                    {
+                        connectBonus += connectBonusTbl[System.Math.Min(add_list.Count, connectBonusTbl.Length - 1)];
+                        colorBits |= (1u << type);
+                        _erases.AddRange(add_list);
                     }
-                };
-
-                add_list.Clear();
-                get_connection(new Vector2Int(x, y));
-
-                if (4 <= add_list.Count)
-                {
-                    _erases.AddRange(add_list);
-                    Debug.Log("Á‚¦‚é‚Õ‚æ‚ª‚ ‚è‚Ü‚·");
                 }
-                    Debug.Log("test");
             }
-        }
 
-        return _erases.Count != 0;
-    }
+            if (chainCount != -1)
+            {
+                uint colorNum = 0;
+                for (; 0 < colorBits; colorBits >>= 1)
+                {
+                    colorNum += (colorBits & 1u);
+                }
+
+                uint colorBonus = colorBonusTbl[System.Math.Min(colorNum, colorBonusTbl.Length - 1)];
+                uint chainBonus = chainBonusTbl[System.Math.Min(chainCount, chainBonusTbl.Length - 1)];
+                uint bonus = System.Math.Max(1, chainBonus + connectBonus + colorBonus);
+                _additiveScore += 10 * (uint)_erases.Count * bonus;
+
+                if (puyoCount == 0) _additiveScore += 1800;
+            }
+
+            return _erases.Count != 0;
+        }
+        }
     public bool Erase()
     {
         _eraseFrames++;
@@ -217,5 +258,12 @@ public class BoardController : MonoBehaviour
         }
 
         return true;
+    }
+    public uint popScore()
+    {
+        uint score = _additiveScore;
+        _additiveScore = 0;
+
+        return score;
     }
 }
